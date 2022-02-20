@@ -47,10 +47,12 @@ import { getPerformance } from 'firebase/performance';
 
 import { getFirebaseConfig } from './firebase-config.js';
 
+
 async function signIn() {
   var provider = new GoogleAuthProvider();
   await signInWithPopup(getAuth(), provider);
 }
+
 
 function signOutUser() {
   signOut(getAuth());
@@ -61,17 +63,21 @@ function initFirebaseAuth() {
   onAuthStateChanged(getAuth(), authStateObserver);
 }
 
+
 function getProfilePicUrl() {
   return getAuth().currentUser.photoURL || '/images/profile_placeholder.png';
 }
+
 
 function getUserName() {
   return getAuth().currentUser.displayName;
 }
 
+
 function isUserSignedIn() {
   return !!getAuth().currentUser;
 }
+
 
 async function saveMessage(messageText) {
   try {
@@ -87,10 +93,10 @@ async function saveMessage(messageText) {
   }
 }
 
+
 function loadMessages() {
   // Create the query to load the last 12 messages and listen for new ones.
   const recentMessagesQuery = query(collection(getFirestore(), 'messages'), orderBy('timestamp', 'desc'), limit(12));
-  
   // Start listening to the query.
   onSnapshot(recentMessagesQuery, function(snapshot) {
     snapshot.docChanges().forEach(function(change) {
@@ -105,10 +111,33 @@ function loadMessages() {
   });
 }
 
-// Saves a new message containing an image in Firebase.
-// This first saves the image in Firebase storage.
+
 async function saveImageMessage(file) {
-  // TODO 9: Posts a new image as a message.
+  try {
+    // 1 - We add a message with a loading icon that will get updated with the shared image.
+    const messageRef = await addDoc(collection(getFirestore(), 'messages'), {
+      name: getUserName(),
+      imageUrl: LOADING_IMAGE_URL,
+      profilePicUrl: getProfilePicUrl(),
+      timestamp: serverTimestamp()
+    });
+
+    // 2 - Upload the image to Cloud Storage.
+    const filePath = `${getAuth().currentUser.uid}/${messageRef.id}/${file.name}`;
+    const newImageRef = ref(getStorage(), filePath);
+    const fileSnapshot = await uploadBytesResumable(newImageRef, file);
+    
+    // 3 - Generate a public URL for the file.
+    const publicImageUrl = await getDownloadURL(newImageRef);
+
+    // 4 - Update the chat message placeholder with the image's URL.
+    await updateDoc(messageRef,{
+      imageUrl: publicImageUrl,
+      storageUri: fileSnapshot.metadata.fullPath
+    });
+  } catch (error) {
+    console.error('There was an error uploading a file to Cloud Storage:', error);
+  }
 }
 
 // Saves the messaging device token to Cloud Firestore.
